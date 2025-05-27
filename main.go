@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -33,8 +34,18 @@ type contextKey string
 
 const userIDKey contextKey = "userID"
 
+func connectDB() (*sql.DB, error) {
+	user := os.Getenv("DB_USER")
+	pass := os.Getenv("DB_PASS")
+	host := os.Getenv("DB_HOST")
+	port := os.Getenv("DB_PORT")
+	name := os.Getenv("DB_NAME")
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", user, pass, host, port, name)
+	return sql.Open("mysql", dsn)
+}
+
 func main() {
-	db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+	db, err := connectDB()
 	if err != nil {
 		panic(err)
 	}
@@ -82,7 +93,7 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Println("Received Lesson:", lesson)
 
-		db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+		db, err := connectDB()
 		if err != nil {
 			http.Error(w, "Database connection failed", http.StatusInternalServerError)
 			return
@@ -157,7 +168,7 @@ func uploadData(w http.ResponseWriter, r *http.Request) {
 
 		var lessonSlice []Lesson
 
-		db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+		db, err := connectDB()
 		if err != nil {
 			panic(err)
 		}
@@ -213,7 +224,7 @@ func deleteRow(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Methods", "OPTIONS, POST") // مجاز بودن متدهای POST و OPTIONS
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")  // مجاز بودن هدر Content-Type
 	if r.Method == "POST" {
-		db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+		db, err := connectDB()
 		if err != nil {
 			panic(err)
 		}
@@ -251,7 +262,7 @@ func signUp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS") // مجاز بودن متدهای POST و OPTIONS
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")  // مجاز بودن هدر Content-Type
 	if r.Method == "POST" {
-		db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+		db, err := connectDB()
 		if err != nil {
 			panic(err)
 
@@ -344,7 +355,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == "POST" {
-		db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+		db, err := connectDB()
 		if err != nil {
 			panic(err)
 		}
@@ -436,7 +447,7 @@ func add(w http.ResponseWriter, r *http.Request) {
 
 	userID := r.Context().Value(userIDKey).(int)
 
-	db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+	db, err := connectDB()
 	if err != nil {
 		log.Println("DB connection error:", err)
 		http.Error(w, "DB Connection Error", 500)
@@ -502,7 +513,7 @@ func uploadDataForStudents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+	db, err := connectDB()
 	if err != nil {
 		log.Println("DB connection error:", err)
 		http.Error(w, "DB Connection Error", 500)
@@ -559,7 +570,7 @@ func delStudentUnit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+	db, err := connectDB()
 	if err != nil {
 		log.Println("DB connection error:", err)
 		http.Error(w, "DB Connection Error", 500)
@@ -615,7 +626,7 @@ func showProfessors(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+	db, err := connectDB()
 	if err != nil {
 		http.Error(w, "Database connection failed", http.StatusInternalServerError)
 		return
@@ -664,7 +675,7 @@ func addProfessor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+	db, err := connectDB()
 	if err != nil {
 		http.Error(w, "Database connection failed", http.StatusInternalServerError)
 		return
@@ -727,7 +738,7 @@ func addStudent(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+	db, err := connectDB()
 	if err != nil {
 		http.Error(w, "Database connection failed", http.StatusInternalServerError)
 		return
@@ -764,7 +775,7 @@ func addStudent(w http.ResponseWriter, r *http.Request) {
 func delProfessor(w http.ResponseWriter, r *http.Request) {
 
 	var professor users
-	db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+	db, err := connectDB()
 	if err != nil {
 		http.Error(w, "Database connection failed", http.StatusInternalServerError)
 		return
@@ -799,7 +810,7 @@ func showUserRoled(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+	db, err := connectDB()
 	if err != nil {
 		panic(err)
 
@@ -840,7 +851,7 @@ func showAll(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
-	db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+	db, err := connectDB()
 	if err != nil {
 		panic(err)
 
@@ -899,7 +910,7 @@ type LessonN struct {
 func showLesson(w http.ResponseWriter, r *http.Request) {
 	var lesson LessonN
 	var lessonSlice []LessonN
-	db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+	db, err := connectDB()
 	if err != nil {
 		panic(err)
 
@@ -926,7 +937,7 @@ func showLesson(w http.ResponseWriter, r *http.Request) {
 func insertLesson(w http.ResponseWriter, r *http.Request) {
 
 	var lesson LessonN
-	db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+	db, err := connectDB()
 	if err != nil {
 		panic(err)
 
@@ -944,7 +955,7 @@ func insertLesson(w http.ResponseWriter, r *http.Request) {
 }
 func delLesson(w http.ResponseWriter, r *http.Request) {
 	var lesson LessonN
-	db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+	db, err := connectDB()
 	if err != nil {
 		http.Error(w, "Database connection failed", http.StatusInternalServerError)
 		return
@@ -970,7 +981,7 @@ func showStudentForProfessor(w http.ResponseWriter, r *http.Request) {
 
 	userID := r.Context().Value(userIDKey).(int)
 	var professorName string
-	db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+	db, err := connectDB()
 	if err != nil {
 		panic(err)
 
@@ -1025,7 +1036,7 @@ func showStudentForProfessor(w http.ResponseWriter, r *http.Request) {
 }
 func addMark(w http.ResponseWriter, r *http.Request) {
 	var lesson Lesson
-	db, err := sql.Open("mysql", "uniroot:yourpassword@tcp(188.121.110.43:3306)/hellodb")
+	db, err := connectDB()
 	if err != nil {
 		panic(err)
 
