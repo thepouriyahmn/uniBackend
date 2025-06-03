@@ -47,12 +47,14 @@ func connectDB() (*sql.DB, error) {
 func main() {
 	db, err := connectDB()
 	if err != nil {
+		fmt.Println("Error connecting to DB:", err)
 		panic(err)
 	}
 
 	defer db.Close()
 	err = db.Ping()
 	if err != nil {
+		fmt.Println("Error connecting to DB:", err)
 		panic(err)
 	}
 	fmt.Println("hello world")
