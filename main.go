@@ -57,7 +57,7 @@ func main() {
 		fmt.Println("Error connecting to DB:", err)
 		panic(err)
 	}
-	fmt.Println("hello world")
+	fmt.Println("hello world!")
 	fmt.Println("Connection to database successfully")
 	http.HandleFunc("/signup", signUp)
 	http.HandleFunc("/login", login)
