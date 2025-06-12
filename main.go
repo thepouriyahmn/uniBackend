@@ -45,6 +45,7 @@ func connectDB() (*sql.DB, error) {
 }
 
 func main() {
+
 	db, err := connectDB()
 	if err != nil {
 		fmt.Println("Error connecting to DB:", err)
