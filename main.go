@@ -9,12 +9,12 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/pouriyahmn/databases"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -46,18 +46,18 @@ func connectDB() (*sql.DB, error) {
 
 func main() {
 
-	db, err := connectDB()
-	if err != nil {
-		fmt.Println("Error connecting to DB:", err)
-		panic(err)
-	}
+	// db, err := connectDB()
+	// if err != nil {
+	// 	fmt.Println("Error connecting to DB:", err)
+	// 	panic(err)
+	// }
 
-	defer db.Close()
-	err = db.Ping()
-	if err != nil {
-		fmt.Println("Error connecting to DB:", err)
-		panic(err)
-	}
+	// defer db.Close()
+	// err = db.Ping()
+	// if err != nil {
+	// 	fmt.Println("Error connecting to DB:", err)
+	// 	panic(err)
+	// }
 	fmt.Println("hello world!")
 	fmt.Println("Connection to database successfully")
 	http.HandleFunc("/signup", signUp)
@@ -80,7 +80,7 @@ func main() {
 	http.HandleFunc("/delStudentUnit", jwtMiddleware2(delStudentUnit))
 	http.HandleFunc("/showStudentForProfessor", jwtMiddleware3(showStudentForProfessor))
 	http.HandleFunc("/addMark", jwtMiddleware3(addMark))
-	err = http.ListenAndServe(":9001", nil)
+	err := http.ListenAndServe(":9001", nil)
 	if err != nil {
 		panic(err)
 	}
@@ -104,45 +104,6 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		defer db.Close()
 
-		// professorRow := db.QueryRow("SELECT professor_name FROM professors where professor_name = ?", lesson.Tname)
-		// var professorName string
-		// err = professorRow.Scan(&professorName)
-		// var professorId int64
-		// if err != nil {
-		// 	res, err := db.Exec("INSERT INTO professors(`professor_name`) VALUES (?)", lesson.Tname)
-		// 	if err != nil {
-		// 		panic(err)
-		// 	}
-		// 	professorId, _ = res.LastInsertId()
-		// } else {
-		// 	professorRow := db.QueryRow("SELECT professor_id FROM professors where professor_name = ?", lesson.Tname)
-		// 	err = professorRow.Scan(&professorId)
-		// 	if err != nil {
-		// 		panic(err)
-		// 	}
-
-		// }
-		// lessonRow := db.QueryRow("SELECT lesson_name FROM lessons where lesson_name = ?", lesson.Name)
-		// var lessonName string
-		// var lessonId int64
-		// err = lessonRow.Scan(&lessonName)
-		// fmt.Println("lessonName is: ", lessonName)
-		// if err != nil {
-
-		// 	res2, err := db.Exec("INSERT INTO lessons(`lesson_name`,`lesson_unit`,`professor_id`) VALUES (?,?,?)", lesson.Name, lesson.Unit, professorId)
-		// 	if err != nil {
-		// 		panic(err)
-		// 	}
-		// 	lessonId, _ = res2.LastInsertId()
-
-		// } else {
-
-		// 	lessonRow := db.QueryRow("SELECT lesson_id FROM lessons where lesson_name = ?", lesson.Name)
-		// 	err = lessonRow.Scan(&lessonId)
-		// 	if err != nil {
-		// 		panic(err)
-		// 	}
-		// }
 		fmt.Println("lesson: ", lesson)
 
 		var professorId int
@@ -253,74 +214,86 @@ func deleteRow(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type User struct {
-	Username      string `json:"username"`
-	Password      string `json:"password"`
-	StudentRole   bool   `json:"studentRole"`
-	ProfessorRole bool   `json:"professorRole"`
-}
-
 func signUp(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Access-Control-Allow-Origin", "*")              // اجازه درخواست از همه دامنه‌ها
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS") // مجاز بودن متدهای POST و OPTIONS
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")  // مجاز بودن هدر Content-Type
+
 	if r.Method == "POST" {
-		db, err := connectDB()
+		// db, err := connectDB()
+		// if err != nil {
+		// 	panic(err)
+
+		// }
+		// defer db.Close()
+		useMongo := false
+
+		var adapter databases.SignUpAdapter
+		var err error
+
+		if useMongo {
+			adapter, err = databases.MongodbAdapter("mongodb://localhost:27017", "unidb", "users")
+		} else {
+			adapter, err = databases.MysqlAdapter("root:newpassword@tcp(localhost:3306)/hellodb")
+		}
+
 		if err != nil {
 			panic(err)
-
 		}
-		defer db.Close()
 
-		var user User
+		var user databases.User
 		err = json.NewDecoder(r.Body).Decode(&user)
 		if err != nil {
 			panic(err)
 		}
-
-		var usernames []string
-		var username string
-
 		if isValidPassword(user.Password) {
 			fmt.Println("valid")
 		} else {
 			http.Error(w, "invalid password", http.StatusBadRequest)
 			return
 		}
-
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+		err = adapter.CheckAndInsert(user, w)
 		if err != nil {
-			panic(err)
-		}
-		rows, err := db.Query("SELECT username FROM users")
-		if err != nil {
-			panic(err)
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			err = rows.Scan(&username)
-			if err != nil {
-				panic(err)
-			}
-			usernames = append(usernames, username)
-		}
-		for _, v := range usernames {
-			if v == user.Username {
-				http.Error(w, "Username already exists", http.StatusConflict)
-				return
-			}
+			http.Error(w, "Username already exists", http.StatusConflict)
+			return
 		}
 
-		stmt, err := db.Prepare("INSERT INTO users(`username`,`password`,`claim_student`,`claim_professor`) VALUES (?,?,?,?)")
-		if err != nil {
-			panic(err)
-		}
-		_, err = stmt.Exec(user.Username, hashedPassword, user.StudentRole, user.ProfessorRole)
-		if err != nil {
-			panic(err)
-		}
+		//var usernames []string
+		//var username string
+
+		// hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+		// if err != nil {
+		// 	panic(err)
+		// }
+		// rows, err := db.Query("SELECT username FROM users")
+		// if err != nil {
+		// 	panic(err)
+		// }
+		// defer rows.Close()
+
+		// for rows.Next() {
+		// 	err = rows.Scan(&username)
+		// 	if err != nil {
+		// 		panic(err)
+		// 	}
+		// 	usernames = append(usernames, username)
+		// }
+		// for _, v := range usernames {
+		// 	if v == user.Username {
+		// 		http.Error(w, "Username already exists", http.StatusConflict)
+		// 		return
+		// 	}
+		// }
+
+		// stmt, err := db.Prepare("INSERT INTO users(`username`,`password`,`claim_student`,`claim_professor`) VALUES (?,?,?,?)")
+		// if err != nil {
+		// 	panic(err)
+		// }
+		// _, err = stmt.Exec(user.Username, hashedPassword, user.StudentRole, user.ProfessorRole)
+		// if err != nil {
+		// 	panic(err)
+		// } SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSIWROHJSKLK
 		// row := db.QueryRow("SELECT ID FROM users WHERE username = ?", user.Username)
 		// err = row.Scan(&id)
 		// if err != nil {
@@ -342,9 +315,9 @@ func signUp(w http.ResponseWriter, r *http.Request) {
 var jwtkey = []byte("secret-key")
 
 type Claims struct {
-	Username string   `json:"username"`
-	Role     []string `json:"role"`
-	Id       int      `json:"id"`
+	Username string      `json:"username"`
+	Role     []string    `json:"role"`
+	Id       interface{} `json:"id"`
 	jwt.StandardClaims
 }
 
@@ -364,52 +337,78 @@ func login(w http.ResponseWriter, r *http.Request) {
 			panic(err)
 		}
 		defer db.Close()
-		type ClaimedUser struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
-		}
-		var claimedUser ClaimedUser
+
+		var claimedUser databases.ClaimedUser
+		var claimedDatabase databases.ClaimedDatabase
 		err = json.NewDecoder(r.Body).Decode(&claimedUser)
 		if err != nil {
 			panic(err)
 		}
 		fmt.Println("username : ", claimedUser.Username)
-		row := db.QueryRow("SELECT username,password,ID FROM users WHERE username = ?", claimedUser.Username)
-
-		var usernamedb, passworddb string
-		var id int
-		var role int
-		var roleSlice []string
-		err = row.Scan(&usernamedb, &passworddb, &id)
-		if err != nil {
-			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		mongo := false
+		var adapter databases.LoginAdapter
+		if mongo {
+			adapter, err = databases.MongodbAdapter("mongodb://localhost:27017", "unidb", "users")
+		} else {
+			adapter, err = databases.MysqlAdapter("root:newpassword@tcp(localhost:3306)/hellodb")
 		}
-		rows, err := db.Query("SELECT role_id FROM user_roles where user_id = ?", id)
 		if err != nil {
 			panic(err)
 		}
-		for rows.Next() {
-			err = rows.Scan(&role)
-			if err != nil {
-				http.Error(w, "not allowed yet", http.StatusForbidden)
-			}
-			roleSlice = append(roleSlice, strconv.Itoa(role))
-		}
-		fmt.Println("role: ", role)
-		err = bcrypt.CompareHashAndPassword([]byte(passworddb), []byte(claimedUser.Password))
+		err, userData := adapter.CheckLogin(claimedUser, w)
 		if err != nil {
-			http.Error(w, "invalid username or password", http.StatusUnauthorized)
+			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+			fmt.Println("check login out")
 			return
 		}
-		if len(roleSlice) == 0 {
-			roleSlice = []string{}
+		err = adapter.GetRoleLogin(userData, w)
+		if err != nil {
+			fmt.Println("get login out")
+			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+
+			return
+		}
+		fmt.Println(&userData)
+		fmt.Println(userData)
+		fmt.Println(claimedUser)
+		fmt.Println(claimedDatabase)
+		// row := db.QueryRow("SELECT username,password,ID FROM users WHERE username = ?", claimedUser.Username)
+
+		// var usernamedb, passworddb string
+		// var id int
+		// var role int
+		// var roleSlice []string
+		// err = row.Scan(&usernamedb, &passworddb, &id)
+		// if err != nil {
+		// 	http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		// }
+		// rows, err := db.Query("SELECT role_id FROM user_roles where user_id = ?", id)
+		// if err != nil {
+		// 	panic(err)
+		// }
+		// for rows.Next() {
+		// 	err = rows.Scan(&role)
+		// 	if err != nil {
+		// 		http.Error(w, "not allowed yet", http.StatusForbidden)
+		// 	}
+		// 	roleSlice = append(roleSlice, strconv.Itoa(role))
+		// }
+		// fmt.Println("role: ", role)
+		err = bcrypt.CompareHashAndPassword([]byte(userData.Password), []byte(claimedUser.Password))
+		if err != nil {
+			http.Error(w, "invalid username or password", http.StatusUnauthorized)
+			fmt.Println("invalid pass")
+			return
+		}
+		if len(userData.Role) == 0 {
+			userData.Role = []string{}
 		}
 
 		expireTime := time.Now().Add(time.Minute * 5)
 		claims := &Claims{
-			Username: usernamedb,
-			Role:     roleSlice,
-			Id:       id,
+			Username: userData.Username,
+			Role:     userData.Role,
+			Id:       userData.Id,
 			StandardClaims: jwt.StandardClaims{
 				ExpiresAt: expireTime.Unix(),
 			},
@@ -430,6 +429,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 	} else {
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		fmt.Println("here")
 	}
 
 }
