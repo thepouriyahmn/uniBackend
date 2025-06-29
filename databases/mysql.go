@@ -20,40 +20,7 @@ func MysqlAdapter(dsn string) (*mysqlAdapter, error) {
 	}
 	return &mysqlAdapter{db: db}, nil
 }
-func (m *mysqlAdapter) CheckAndInsert(user User, w http.ResponseWriter) error {
-	rows, err := m.db.Query("SELECT username FROM users")
-	if err != nil {
-		panic(err)
-	}
-	var username string
-	var usernameSlice []string
-	for rows.Next() {
-		err = rows.Scan(&username)
-		if err != nil {
-			panic(err)
-		}
-		usernameSlice = append(usernameSlice, username)
-	}
-	for _, v := range usernameSlice {
-		if v == user.Username {
-			http.Error(w, "Username already exists", http.StatusConflict)
-			return err
-		}
-	}
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-	if err != nil {
-		panic(err)
-	}
-	stmt, err := m.db.Prepare("INSERT INTO users(`username`,`password`,`claim_student`,`claim_professor`) VALUES (?,?,?,?)")
-	if err != nil {
-		panic(err)
-	}
-	_, err = stmt.Exec(user.Username, hashedPassword, user.StudentRole, user.ProfessorRole)
-	if err != nil {
-		panic(err)
-	}
-	return nil
-}
+
 func (m *mysqlAdapter) CheckLogin(claimedUser ClaimedUser, w http.ResponseWriter) (error, *ClaimedDatabase) {
 	var (
 		usernameDB string
@@ -100,5 +67,58 @@ func (m *mysqlAdapter) GetRoleLogin(claimedDatabase *ClaimedDatabase, w http.Res
 		roleSlice = append(roleSlice, strconv.Itoa(role))
 	}
 	claimedDatabase.Role = roleSlice
+	return nil
+}
+
+// //////\
+type mysqladapter struct {
+	db *sql.DB
+}
+
+func NewMysqlAdapter(dsn string) (mysqladapter, error) {
+
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return mysqladapter{}, err
+	}
+	return mysqladapter{db: db}, nil
+}
+func (m mysqladapter) CheckUserByName(username string) error {
+	var userslice []string
+	var user string
+	rows, err := m.db.Query("SELECT username FROM users")
+	if err != nil {
+		panic(err)
+	}
+	for rows.Next() {
+		err = rows.Scan(&user)
+		if err != nil {
+			panic(err)
+		}
+		userslice = append(userslice, user)
+
+	}
+	for _, v := range userslice {
+		if v == username {
+			return err
+		}
+	}
+	return nil
+
+}
+
+func (m mysqladapter) InsertUser(user User) error {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		panic(err)
+	}
+	stmt, err := m.db.Prepare("INSERT INTO users(`username`,`password`,`claim_student`,`claim_professor`) VALUES (?,?,?,?)")
+	if err != nil {
+		panic(err)
+	}
+	_, err = stmt.Exec(user.Username, hashedPassword, user.StudentRole, user.ProfessorRole)
+	if err != nil {
+		panic(err)
+	}
 	return nil
 }

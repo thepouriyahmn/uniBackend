@@ -110,3 +110,41 @@ func (m *MongoAdapter) GetRoleLogin(claimedDatabase *ClaimedDatabase, w http.Res
 	return nil
 
 }
+
+// ////////////////////
+type mongodbAdapter struct {
+	Collection *mongo.Collection
+}
+
+func NewMongodbAdapter(uri, dbName, collectionName string) (mongodbAdapter, error) {
+	clientOpts := options.Client().ApplyURI(uri)
+	client, err := mongo.Connect(clientOpts)
+	if err != nil {
+		return mongodbAdapter{}, err
+	}
+	collection := client.Database(dbName).Collection(collectionName)
+	return mongodbAdapter{Collection: collection}, nil
+}
+func (m mongodbAdapter) CheckUserByName(username string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	count, err := m.Collection.CountDocuments(ctx, bson.M{"username": username})
+	if err != nil || count > 0 {
+		return err
+	}
+	return nil
+}
+func (m mongodbAdapter) InsertUser(user User) error {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	user.Password = string(hashedPassword)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err != nil {
+		panic(err)
+	}
+	_, err = m.Collection.InsertOne(ctx, user)
+	if err != nil {
+		panic(err)
+	}
+	return nil
+}

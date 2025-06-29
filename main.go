@@ -44,7 +44,28 @@ func connectDB() (*sql.DB, error) {
 	return sql.Open("mysql", dsn)
 }
 
+var signUpbl databases.SignInBusinessLogic
+
 func main() {
+	mongo := true
+	var signInRepo databases.SignInRepository
+	signInMongo, err := databases.NewMongodbAdapter("mongodb://localhost:27017", "unidb", "users")
+	if err != nil {
+		panic(err)
+	}
+	signInMysql, err := databases.NewMysqlAdapter("root:newpassword@tcp(localhost:3306)/hellodb")
+	if err != nil {
+		panic(err)
+	}
+
+	if mongo {
+		signInRepo = signInMongo
+
+	} else {
+		signInRepo = signInMysql
+
+	}
+	signUpbl = databases.NewSignInBusinessLogic(signInRepo)
 
 	// db, err := connectDB()
 	// if err != nil {
@@ -80,7 +101,7 @@ func main() {
 	http.HandleFunc("/delStudentUnit", jwtMiddleware2(delStudentUnit))
 	http.HandleFunc("/showStudentForProfessor", jwtMiddleware3(showStudentForProfessor))
 	http.HandleFunc("/addMark", jwtMiddleware3(addMark))
-	err := http.ListenAndServe(":9001", nil)
+	err = http.ListenAndServe(":9001", nil)
 	if err != nil {
 		panic(err)
 	}
@@ -227,23 +248,23 @@ func signUp(w http.ResponseWriter, r *http.Request) {
 
 		// }
 		// defer db.Close()
-		useMongo := false
+		// useMongo := false
 
-		var adapter databases.SignUpAdapter
-		var err error
+		// var adapter databases.SignUpAdapter
+		// var err error
 
-		if useMongo {
-			adapter, err = databases.MongodbAdapter("mongodb://localhost:27017", "unidb", "users")
-		} else {
-			adapter, err = databases.MysqlAdapter("root:newpassword@tcp(localhost:3306)/hellodb")
-		}
+		// if useMongo {
+		// 	adapter, err = databases.MongodbAdapter("mongodb://localhost:27017", "unidb", "users")
+		// } else {
+		// 	adapter, err = databases.MysqlAdapter("root:newpassword@tcp(localhost:3306)/hellodb")
+		// }
 
-		if err != nil {
-			panic(err)
-		}
+		// if err != nil {
+		// 	panic(err)
+		// }
 
 		var user databases.User
-		err = json.NewDecoder(r.Body).Decode(&user)
+		err := json.NewDecoder(r.Body).Decode(&user)
 		if err != nil {
 			panic(err)
 		}
@@ -253,11 +274,18 @@ func signUp(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid password", http.StatusBadRequest)
 			return
 		}
-		err = adapter.CheckAndInsert(user, w)
+		fmt.Println("recived: ", user)
+		err = signUpbl.SignUp(user.Username, user.Password, user)
 		if err != nil {
 			http.Error(w, "Username already exists", http.StatusConflict)
 			return
 		}
+
+		// err = adapter.CheckAndInsert(user, w)
+		// if err != nil {
+		// 	http.Error(w, "Username already exists", http.StatusConflict)
+		// 	return
+		// }
 
 		//var usernames []string
 		//var username string
