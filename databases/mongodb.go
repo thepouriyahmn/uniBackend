@@ -2,6 +2,8 @@ package databases
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -129,8 +131,11 @@ func (m mongodbAdapter) CheckUserByName(username string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	count, err := m.Collection.CountDocuments(ctx, bson.M{"username": username})
+	fmt.Println("is: ", count)
 	if err != nil || count > 0 {
-		return err
+		fmt.Println("error has returned")
+
+		return errors.New("name has been picked before")
 	}
 	return nil
 }

@@ -27,8 +27,9 @@ func NewSignInBusinessLogic(repo SignInRepository) SignInBusinessLogic {
 }
 func (b *SignInBusinessLogic) SignUp(username, password string, user User) error {
 	err := b.SignIn.CheckUserByName(username)
+	fmt.Println("err is: ", err)
 	if err != nil {
-
+		fmt.Println("error has returned again")
 		return err
 	}
 

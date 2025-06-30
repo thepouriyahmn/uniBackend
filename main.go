@@ -8,13 +8,15 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"regexp"
+
+	//	"regexp"
 	"strings"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pouriyahmn/databases"
+	"github.com/pouriyahmn/protocols"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -45,27 +47,34 @@ func connectDB() (*sql.DB, error) {
 }
 
 var signUpbl databases.SignInBusinessLogic
+var httpProtocol protocols.Protocol
+var wsProtocol protocols.Protocol
 
 func main() {
 	mongo := true
-	var signInRepo databases.SignInRepository
-	signInMongo, err := databases.NewMongodbAdapter("mongodb://localhost:27017", "unidb", "users")
+	var Repo databases.SignInRepository
+	Mongo, err := databases.NewMongodbAdapter("mongodb://localhost:27017", "unidb", "users")
 	if err != nil {
 		panic(err)
 	}
-	signInMysql, err := databases.NewMysqlAdapter("root:newpassword@tcp(localhost:3306)/hellodb")
+	Mysql, err := databases.NewMysqlAdapter("root:newpassword@tcp(localhost:3306)/hellodb")
 	if err != nil {
 		panic(err)
 	}
 
 	if mongo {
-		signInRepo = signInMongo
+		Repo = Mongo
 
 	} else {
-		signInRepo = signInMysql
+		Repo = Mysql
 
 	}
-	signUpbl = databases.NewSignInBusinessLogic(signInRepo)
+	signUpbl = databases.NewSignInBusinessLogic(Repo)
+
+	//////////////////
+
+	httpProtocol = protocols.HttpProtocol{Logic: signUpbl}
+	wsProtocol = protocols.WebSocket{Logic: signUpbl}
 
 	// db, err := connectDB()
 	// if err != nil {
@@ -82,6 +91,7 @@ func main() {
 	fmt.Println("hello world!")
 	fmt.Println("Connection to database successfully")
 	http.HandleFunc("/signup", signUp)
+	http.HandleFunc("/signupWS", signUpWS)
 	http.HandleFunc("/login", login)
 	http.HandleFunc("/delete", jwtMiddleware(deleteRow))
 	http.HandleFunc("/show", jwtMiddleware(uploadData))
@@ -234,110 +244,44 @@ func deleteRow(w http.ResponseWriter, r *http.Request) {
 
 	}
 }
+func signUpWS(w http.ResponseWriter, r *http.Request) {
+	var user databases.User
+	wsProtocol.SignUpProtocol(user, w, r)
+}
 
 func signUp(w http.ResponseWriter, r *http.Request) {
-
 	w.Header().Set("Access-Control-Allow-Origin", "*")              // اجازه درخواست از همه دامنه‌ها
-	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS") // مجاز بودن متدهای POST و OPTIONS
+	w.Header().Set("Access-Control-Allow-Methods", "OPTIONS, POST") // مجاز بودن متدهای POST و OPTIONS
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")  // مجاز بودن هدر Content-Type
+	var user databases.User
+	httpProtocol.SignUpProtocol(user, w, r)
+	// w.Header().Set("Access-Control-Allow-Origin", "*")              // اجازه درخواست از همه دامنه‌ها
+	// w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS") // مجاز بودن متدهای POST و OPTIONS
+	// w.Header().Set("Access-Control-Allow-Headers", "Content-Type")  // مجاز بودن هدر Content-Type
 
-	if r.Method == "POST" {
-		// db, err := connectDB()
-		// if err != nil {
-		// 	panic(err)
+	// if r.Method == "POST" {
 
-		// }
-		// defer db.Close()
-		// useMongo := false
+	// 	var user databases.User
+	// 	err := json.NewDecoder(r.Body).Decode(&user)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	if isValidPassword(user.Password) {
+	// 		fmt.Println("valid")
+	// 	} else {
+	// 		http.Error(w, "invalid password", http.StatusBadRequest)
+	// 		return
+	// 	}
+	// 	fmt.Println("recived: ", user)
+	// 	err = signUpbl.SignUp(user.Username, user.Password, user)
+	// 	if err != nil {
+	// 		http.Error(w, "Username already exists", http.StatusConflict)
+	// 		return
+	// 	}
 
-		// var adapter databases.SignUpAdapter
-		// var err error
+	// 	w.WriteHeader(http.StatusOK)
+	// }
 
-		// if useMongo {
-		// 	adapter, err = databases.MongodbAdapter("mongodb://localhost:27017", "unidb", "users")
-		// } else {
-		// 	adapter, err = databases.MysqlAdapter("root:newpassword@tcp(localhost:3306)/hellodb")
-		// }
-
-		// if err != nil {
-		// 	panic(err)
-		// }
-
-		var user databases.User
-		err := json.NewDecoder(r.Body).Decode(&user)
-		if err != nil {
-			panic(err)
-		}
-		if isValidPassword(user.Password) {
-			fmt.Println("valid")
-		} else {
-			http.Error(w, "invalid password", http.StatusBadRequest)
-			return
-		}
-		fmt.Println("recived: ", user)
-		err = signUpbl.SignUp(user.Username, user.Password, user)
-		if err != nil {
-			http.Error(w, "Username already exists", http.StatusConflict)
-			return
-		}
-
-		// err = adapter.CheckAndInsert(user, w)
-		// if err != nil {
-		// 	http.Error(w, "Username already exists", http.StatusConflict)
-		// 	return
-		// }
-
-		//var usernames []string
-		//var username string
-
-		// hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-		// if err != nil {
-		// 	panic(err)
-		// }
-		// rows, err := db.Query("SELECT username FROM users")
-		// if err != nil {
-		// 	panic(err)
-		// }
-		// defer rows.Close()
-
-		// for rows.Next() {
-		// 	err = rows.Scan(&username)
-		// 	if err != nil {
-		// 		panic(err)
-		// 	}
-		// 	usernames = append(usernames, username)
-		// }
-		// for _, v := range usernames {
-		// 	if v == user.Username {
-		// 		http.Error(w, "Username already exists", http.StatusConflict)
-		// 		return
-		// 	}
-		// }
-
-		// stmt, err := db.Prepare("INSERT INTO users(`username`,`password`,`claim_student`,`claim_professor`) VALUES (?,?,?,?)")
-		// if err != nil {
-		// 	panic(err)
-		// }
-		// _, err = stmt.Exec(user.Username, hashedPassword, user.StudentRole, user.ProfessorRole)
-		// if err != nil {
-		// 	panic(err)
-		// } SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSIWROHJSKLK
-		// row := db.QueryRow("SELECT ID FROM users WHERE username = ?", user.Username)
-		// err = row.Scan(&id)
-		// if err != nil {
-		// 	panic(err)
-		// }
-		// fmt.Println("user role is: ", user.ProfessorRole)
-		// stmt, err = db.Prepare("INSERT INTO users(`claim_student`,`claim_professor`) VALUES (?,?)")
-		// if err != nil {
-		// 	panic(err)
-		// }
-		// _, err = stmt.Exec(user.StudentRole, user.ProfessorRole)
-		// if err != nil {
-		// 	panic(err)
-		// }
-		w.WriteHeader(http.StatusOK)
-	}
 }
 
 var jwtkey = []byte("secret-key")
@@ -1229,9 +1173,4 @@ func jwtMiddleware3(next http.HandlerFunc) http.HandlerFunc {
 		next.ServeHTTP(w, r.WithContext(ctx))
 
 	}
-}
-
-func isValidPassword(password string) bool {
-	re := regexp.MustCompile(`^[a-zA-Z0-9]{6,}$`)
-	return re.MatchString(password)
 }
