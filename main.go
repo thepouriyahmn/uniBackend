@@ -11,13 +11,11 @@ import (
 
 	//	"regexp"
 	"strings"
-	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pouriyahmn/databases"
 	"github.com/pouriyahmn/protocols"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type Lesson struct {
@@ -47,13 +45,19 @@ func connectDB() (*sql.DB, error) {
 }
 
 var signUpbl databases.SignInBusinessLogic
+var loginBl databases.LoginBussinessLogic
 var httpProtocol protocols.Protocol
 var wsProtocol protocols.Protocol
 
 func main() {
+	type fullRepo struct {
+		databases.SignInRepository
+		databases.LoginRepository
+	}
+	var repo fullRepo
 	mongo := true
-	var Repo databases.SignInRepository
-	Mongo, err := databases.NewMongodbAdapter("mongodb://localhost:27017", "unidb", "users")
+
+	Mongo, err := databases.NewMongodbAdapter("mongodb://localhost:27017", "unidb")
 	if err != nil {
 		panic(err)
 	}
@@ -63,18 +67,18 @@ func main() {
 	}
 
 	if mongo {
-		Repo = Mongo
+		repo.SignInRepository = Mongo
+		repo.LoginRepository = Mongo
 
 	} else {
-		Repo = Mysql
+		repo.SignInRepository = Mysql
+		repo.LoginRepository = Mysql
 
 	}
-	signUpbl = databases.NewSignInBusinessLogic(Repo)
+	signUpbl = databases.NewSignInBusinessLogic(repo)
+	loginBl = databases.NewLoginBussinessLogic(repo)
 
 	//////////////////
-
-	httpProtocol = protocols.HttpProtocol{Logic: signUpbl}
-	wsProtocol = protocols.WebSocket{Logic: signUpbl}
 
 	// db, err := connectDB()
 	// if err != nil {
@@ -93,6 +97,7 @@ func main() {
 	http.HandleFunc("/signup", signUp)
 	http.HandleFunc("/signupWS", signUpWS)
 	http.HandleFunc("/login", login)
+	http.HandleFunc("/loginWS", loginWS)
 	http.HandleFunc("/delete", jwtMiddleware(deleteRow))
 	http.HandleFunc("/show", jwtMiddleware(uploadData))
 	http.HandleFunc("/submit", jwtMiddleware(getHandler))
@@ -245,6 +250,8 @@ func deleteRow(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func signUpWS(w http.ResponseWriter, r *http.Request) {
+
+	wsProtocol = protocols.WebSocket{SignUpLogic: signUpbl}
 	var user databases.User
 	wsProtocol.SignUpProtocol(user, w, r)
 }
@@ -253,6 +260,8 @@ func signUp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")              // اجازه درخواست از همه دامنه‌ها
 	w.Header().Set("Access-Control-Allow-Methods", "OPTIONS, POST") // مجاز بودن متدهای POST و OPTIONS
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")  // مجاز بودن هدر Content-Type
+
+	httpProtocol = protocols.HttpProtocol{SignUpLogic: signUpbl}
 	var user databases.User
 	httpProtocol.SignUpProtocol(user, w, r)
 	// w.Header().Set("Access-Control-Allow-Origin", "*")              // اجازه درخواست از همه دامنه‌ها
@@ -293,117 +302,121 @@ type Claims struct {
 	jwt.StandardClaims
 }
 
+func loginWS(w http.ResponseWriter, r *http.Request) {
+	wsProtocol = protocols.WebSocket{LoginLogic: loginBl}
+	wsProtocol.LoginProtocol(w, r)
+}
+
 func login(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*") // یا * برای همه دامنه‌ها
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	httpProtocol = protocols.HttpProtocol{LoginLogic: loginBl}
+	httpProtocol.LoginProtocol(w, r)
+	// // پاسخ به preflight (OPTIONS)
+	// if r.Method == "OPTIONS" {
+	// 	w.WriteHeader(http.StatusOK)
+	// 	return
+	// }
+	// if r.Method == "POST" {
+	// 	db, err := connectDB()
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	defer db.Close()
 
-	// پاسخ به preflight (OPTIONS)
-	if r.Method == "OPTIONS" {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	if r.Method == "POST" {
-		db, err := connectDB()
-		if err != nil {
-			panic(err)
-		}
-		defer db.Close()
+	// 	var claimedUser databases.ClaimedUser
+	// 	var claimedDatabase databases.ClaimedDatabase
+	// 	err = json.NewDecoder(r.Body).Decode(&claimedUser)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	fmt.Println("username : ", claimedUser.Username)
+	// 	mongo := false
+	// 	var adapter databases.LoginAdapter
+	// 	if mongo {
+	// 		adapter, err = databases.MongodbAdapter("mongodb://localhost:27017", "unidb", "users")
+	// 	} else {
+	// 		adapter, err = databases.MysqlAdapter("root:newpassword@tcp(localhost:3306)/hellodb")
+	// 	}
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	err, userData := adapter.CheckLogin(claimedUser, w)
+	// 	if err != nil {
+	// 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+	// 		fmt.Println("check login out")
+	// 		return
+	// 	}
+	// 	err = adapter.GetRoleLogin(userData, w)
+	// 	if err != nil {
+	// 		fmt.Println("get login out")
+	// 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 
-		var claimedUser databases.ClaimedUser
-		var claimedDatabase databases.ClaimedDatabase
-		err = json.NewDecoder(r.Body).Decode(&claimedUser)
-		if err != nil {
-			panic(err)
-		}
-		fmt.Println("username : ", claimedUser.Username)
-		mongo := false
-		var adapter databases.LoginAdapter
-		if mongo {
-			adapter, err = databases.MongodbAdapter("mongodb://localhost:27017", "unidb", "users")
-		} else {
-			adapter, err = databases.MysqlAdapter("root:newpassword@tcp(localhost:3306)/hellodb")
-		}
-		if err != nil {
-			panic(err)
-		}
-		err, userData := adapter.CheckLogin(claimedUser, w)
-		if err != nil {
-			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
-			fmt.Println("check login out")
-			return
-		}
-		err = adapter.GetRoleLogin(userData, w)
-		if err != nil {
-			fmt.Println("get login out")
-			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+	// 		return
+	// 	}
+	// 	fmt.Println(&userData)
+	// 	fmt.Println(userData)
+	// 	fmt.Println(claimedUser)
+	// 	fmt.Println(claimedDatabase)
+	// row := db.QueryRow("SELECT username,password,ID FROM users WHERE username = ?", claimedUser.Username)
 
-			return
-		}
-		fmt.Println(&userData)
-		fmt.Println(userData)
-		fmt.Println(claimedUser)
-		fmt.Println(claimedDatabase)
-		// row := db.QueryRow("SELECT username,password,ID FROM users WHERE username = ?", claimedUser.Username)
+	// var usernamedb, passworddb string
+	// var id int
+	// var role int
+	// var roleSlice []string
+	// err = row.Scan(&usernamedb, &passworddb, &id)
+	// if err != nil {
+	// 	http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+	// }
+	// rows, err := db.Query("SELECT role_id FROM user_roles where user_id = ?", id)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// for rows.Next() {
+	// 	err = rows.Scan(&role)
+	// 	if err != nil {
+	// 		http.Error(w, "not allowed yet", http.StatusForbidden)
+	// 	}
+	// 	roleSlice = append(roleSlice, strconv.Itoa(role))
+	// }
+	// fmt.Println("role: ", role)
+	// 	err = bcrypt.CompareHashAndPassword([]byte(userData.Password), []byte(claimedUser.Password))
+	// 	if err != nil {
+	// 		http.Error(w, "invalid username or password", http.StatusUnauthorized)
+	// 		fmt.Println("invalid pass")
+	// 		return
+	// 	}
+	// 	if len(userData.Role) == 0 {
+	// 		userData.Role = []string{}
+	// 	}
 
-		// var usernamedb, passworddb string
-		// var id int
-		// var role int
-		// var roleSlice []string
-		// err = row.Scan(&usernamedb, &passworddb, &id)
-		// if err != nil {
-		// 	http.Error(w, "Invalid credentials", http.StatusUnauthorized)
-		// }
-		// rows, err := db.Query("SELECT role_id FROM user_roles where user_id = ?", id)
-		// if err != nil {
-		// 	panic(err)
-		// }
-		// for rows.Next() {
-		// 	err = rows.Scan(&role)
-		// 	if err != nil {
-		// 		http.Error(w, "not allowed yet", http.StatusForbidden)
-		// 	}
-		// 	roleSlice = append(roleSlice, strconv.Itoa(role))
-		// }
-		// fmt.Println("role: ", role)
-		err = bcrypt.CompareHashAndPassword([]byte(userData.Password), []byte(claimedUser.Password))
-		if err != nil {
-			http.Error(w, "invalid username or password", http.StatusUnauthorized)
-			fmt.Println("invalid pass")
-			return
-		}
-		if len(userData.Role) == 0 {
-			userData.Role = []string{}
-		}
+	// 	expireTime := time.Now().Add(time.Minute * 5)
+	// 	claims := &Claims{
+	// 		Username: userData.Username,
+	// 		Role:     userData.Role,
+	// 		Id:       userData.Id,
+	// 		StandardClaims: jwt.StandardClaims{
+	// 			ExpiresAt: expireTime.Unix(),
+	// 		},
+	// 	}
+	// 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	// 	tokenString, err := token.SignedString(jwtkey)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
 
-		expireTime := time.Now().Add(time.Minute * 5)
-		claims := &Claims{
-			Username: userData.Username,
-			Role:     userData.Role,
-			Id:       userData.Id,
-			StandardClaims: jwt.StandardClaims{
-				ExpiresAt: expireTime.Unix(),
-			},
-		}
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-		tokenString, err := token.SignedString(jwtkey)
-		if err != nil {
-			panic(err)
-		}
+	// 	fmt.Println("redirected")
+	// 	w.Header().Set("Content-Type", "application/json")
+	// 	w.WriteHeader(http.StatusOK)
+	// 	err = json.NewEncoder(w).Encode(map[string]string{"token": tokenString})
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
 
-		fmt.Println("redirected")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		err = json.NewEncoder(w).Encode(map[string]string{"token": tokenString})
-		if err != nil {
-			panic(err)
-		}
-
-	} else {
-		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
-		fmt.Println("here")
-	}
-
+	// } else {
+	// 	http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+	// 	fmt.Println("here")
 }
 
 func add(w http.ResponseWriter, r *http.Request) {

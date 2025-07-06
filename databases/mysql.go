@@ -2,6 +2,7 @@ package databases
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -121,4 +122,33 @@ func (m mysqladapter) InsertUser(user User) error {
 		panic(err)
 	}
 	return nil
+}
+func (m mysqladapter) CheckUserByUsernameAndPassword(username, password string) (interface{}, error) {
+	var usernameDB, passwordDB, idDB string
+	row := m.db.QueryRow("SELECT username,password,ID FROM users WHERE username = ?", username)
+	err := row.Scan(&usernameDB, &passwordDB, &idDB)
+	if err != nil {
+		return "", errors.New("username or password is incorrect")
+	}
+	err = bcrypt.CompareHashAndPassword([]byte(password), []byte(passwordDB))
+	if err != nil {
+		return "", errors.New("username or password is incorrect")
+	}
+	return idDB, nil
+}
+func (m mysqladapter) GetRoleById(id interface{}) ([]string, error) {
+	var roleslice []string
+	var role string
+	row, err := m.db.Query("SELECT role_id from user_roles where username")
+	if err != nil {
+		return []string{}, errors.New("not found")
+	}
+	for row.Next() {
+		err = row.Scan(&role)
+		if err != nil {
+			panic(err)
+		}
+		roleslice = append(roleslice, role)
+	}
+	return roleslice, nil
 }

@@ -1,6 +1,7 @@
 package protocols
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
@@ -9,7 +10,12 @@ import (
 )
 
 type WebSocket struct {
-	Logic databases.SignInBusinessLogic
+	SignUpLogic databases.SignInBusinessLogic
+	LoginLogic  databases.LoginBussinessLogic
+}
+
+func NewWsProtocol() *WebSocket {
+	return &WebSocket{}
 }
 
 func (l WebSocket) SignUpProtocol(user databases.User, w http.ResponseWriter, r *http.Request) {
@@ -54,11 +60,13 @@ func (l WebSocket) SignUpProtocol(user databases.User, w http.ResponseWriter, r 
 		// 		}
 		// 	}
 
-		err = l.Logic.SignUp(user.Username, user.Password, user)
+		err = l.SignUpLogic.SignUp(user.Username, user.Password, user)
 		if err != nil {
+
 			conn.WriteJSON(map[string]interface{}{
-				"status":  "error",
-				"message": "user name already exist",
+				"status":  "unauthorized",
+				"code":    401,
+				"message": "Invalid credentials",
 			})
 			continue
 		}
@@ -68,4 +76,46 @@ func (l WebSocket) SignUpProtocol(user databases.User, w http.ResponseWriter, r 
 			"message": "Signup successful",
 		})
 	}
+}
+func (l WebSocket) LoginProtocol(w http.ResponseWriter, r *http.Request) {
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool { return true },
+	}
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println("WebSocket upgrade error:", err)
+		return
+	}
+
+	defer conn.Close()
+	for {
+
+		var msg map[string]interface{}
+		err := conn.ReadJSON(&msg)
+		if err != nil {
+			break
+		}
+
+		username, _ := msg["username"].(string)
+		password, _ := msg["password"].(string)
+
+		token, err := l.LoginLogic.Login(username, password)
+
+		if err != nil {
+			conn.WriteJSON(map[string]interface{}{
+				"status":  "unauthorized",
+				"code":    401,
+				"message": "Invalid credentials",
+			})
+			continue
+		}
+		fmt.Println("token is2: ", token)
+
+		conn.WriteJSON(map[string]interface{}{
+			"status":  "ok",
+			"code":    200,
+			"message": token,
+		})
+	}
+
 }
