@@ -128,10 +128,12 @@ func (m mysqladapter) CheckUserByUsernameAndPassword(username, password string) 
 	row := m.db.QueryRow("SELECT username,password,ID FROM users WHERE username = ?", username)
 	err := row.Scan(&usernameDB, &passwordDB, &idDB)
 	if err != nil {
+		fmt.Printf("scan err: %v", err)
 		return "", errors.New("username or password is incorrect")
 	}
-	err = bcrypt.CompareHashAndPassword([]byte(password), []byte(passwordDB))
+	err = bcrypt.CompareHashAndPassword([]byte(passwordDB), []byte(password))
 	if err != nil {
+		fmt.Printf("scan err: %v", err)
 		return "", errors.New("username or password is incorrect")
 	}
 	return idDB, nil
@@ -139,7 +141,7 @@ func (m mysqladapter) CheckUserByUsernameAndPassword(username, password string) 
 func (m mysqladapter) GetRoleById(id interface{}) ([]string, error) {
 	var roleslice []string
 	var role string
-	row, err := m.db.Query("SELECT role_id from user_roles where username")
+	row, err := m.db.Query("SELECT role_id from user_roles where user_id = ?", id)
 	if err != nil {
 		return []string{}, errors.New("not found")
 	}

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 
 	//	"regexp"
 	"strings"
@@ -35,11 +34,11 @@ type contextKey string
 const userIDKey contextKey = "userID"
 
 func connectDB() (*sql.DB, error) {
-	user := os.Getenv("DB_USER")
-	pass := os.Getenv("DB_PASS")
-	host := os.Getenv("DB_HOST")
-	port := os.Getenv("DB_PORT")
-	name := os.Getenv("DB_NAME")
+	user := "root"
+	pass := "newpassword"
+	host := "localhost"
+	port := "27017"
+	name := "hellodb"
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", user, pass, host, port, name)
 	return sql.Open("mysql", dsn)
 }
@@ -55,7 +54,7 @@ func main() {
 		databases.LoginRepository
 	}
 	var repo fullRepo
-	mongo := true
+	mongo := false
 
 	Mongo, err := databases.NewMongodbAdapter("mongodb://localhost:27017", "unidb")
 	if err != nil {
@@ -69,11 +68,11 @@ func main() {
 	if mongo {
 		repo.SignInRepository = Mongo
 		repo.LoginRepository = Mongo
-
+		fmt.Println("mongo")
 	} else {
 		repo.SignInRepository = Mysql
 		repo.LoginRepository = Mysql
-
+		fmt.Println("using mysql")
 	}
 	signUpbl = databases.NewSignInBusinessLogic(repo)
 	loginBl = databases.NewLoginBussinessLogic(repo)
@@ -829,6 +828,11 @@ func showUserRoled(w http.ResponseWriter, r *http.Request) {
 }
 
 func showAll(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	fmt.Println("🔔 /showAll called")
 	type users struct {
 		Id             int    `json:"id"`
 		Username       string `json:"name"`
@@ -846,11 +850,18 @@ func showAll(w http.ResponseWriter, r *http.Request) {
 
 	}
 	defer db.Close()
-	var userSearch string
+	// var userSearch string
 	var userSlice []users
+	// err = json.NewDecoder(r.Body).Decode(&userSearch)
+	// if err != nil {
+	// 	panic(err)
+	//}
+	var userSearch string
 	err = json.NewDecoder(r.Body).Decode(&userSearch)
 	if err != nil {
-		panic(err)
+		fmt.Printf("reading error: %v", err)
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
 	}
 	// 	rows, err := db.Query(`SELECT u.ID, u.username
 	// FROM users u
@@ -888,6 +899,7 @@ func showAll(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic(err)
 	}
+	//fmt.Println("api ends")
 }
 
 type LessonN struct {
